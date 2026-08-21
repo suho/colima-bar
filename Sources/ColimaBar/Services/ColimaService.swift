@@ -70,6 +70,63 @@ struct ColimaService: Sendable {
     _ = try await runner.run(dockerURL, arguments: arguments)
   }
 
+  func images(profileName: String) async throws -> [DockerImage] {
+    try await list(.images, profileName: profileName)
+      .sorted { lhs, rhs in
+        if lhs.isUntagged != rhs.isUntagged { return !lhs.isUntagged }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+      }
+  }
+
+  func volumes(profileName: String) async throws -> [DockerVolume] {
+    try await list(.volumes, profileName: profileName)
+      .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+
+  func networks(profileName: String) async throws -> [DockerNetwork] {
+    try await list(.networks, profileName: profileName)
+      .sorted { lhs, rhs in
+        if lhs.isPredefined != rhs.isPredefined { return !lhs.isPredefined }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+      }
+  }
+
+  func buildCache(profileName: String) async throws -> [DockerBuildCacheRecord] {
+    let records: [DockerBuildCacheRecord] = try await list(.buildCache, profileName: profileName)
+    return records.sorted { lhs, rhs in
+      if lhs.isReclaimable != rhs.isReclaimable { return !lhs.isReclaimable }
+      return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+  }
+
+  func removeAll(_ kind: ResourceKind, references: [String], profileName: String) async throws {
+    guard !kind.removesByReference || !references.isEmpty else { return }
+    guard let dockerURL else { throw ServiceError.dockerNotInstalled }
+    _ = try await runner.run(
+      dockerURL,
+      arguments: ["--host", dockerEndpoint(profileName: profileName)]
+        + kind.removeAllArguments(references: references)
+    )
+  }
+
+  private func list<Resource: Decodable>(
+    _ kind: ResourceKind,
+    profileName: String
+  ) async throws -> [Resource] {
+    guard let arguments = kind.listArguments else { return [] }
+    guard let dockerURL else { throw ServiceError.dockerNotInstalled }
+    let output = try await runner.run(
+      dockerURL,
+      arguments: ["--host", dockerEndpoint(profileName: profileName)] + arguments
+    ).text
+
+    let decoder = JSONDecoder()
+    return
+      output
+      .split(whereSeparator: \.isNewline)
+      .compactMap { try? decoder.decode(Resource.self, from: Data($0.utf8)) }
+  }
+
   func diskUsage(profileName: String) async throws -> [DockerResourceUsage] {
     guard let dockerURL else { throw ServiceError.dockerNotInstalled }
     let output = try await runner.run(

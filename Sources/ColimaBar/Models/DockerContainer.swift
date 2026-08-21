@@ -28,6 +28,8 @@ struct ContainerMount: Identifiable, Hashable, Sendable {
   let source: String
   let destination: String
   let type: String
+  /// Set for volume mounts; it matches the name reported by `docker volume ls`.
+  let volumeName: String?
 
   var id: String { "\(source):\(destination)" }
 }

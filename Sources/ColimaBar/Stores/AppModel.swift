@@ -9,6 +9,7 @@ final class AppModel {
     case dashboard
     case settings
     case cleanup
+    case resources
   }
 
   private let service: ColimaService
@@ -30,6 +31,13 @@ final class AppModel {
   var diskUsage: [DockerResourceUsage] = []
   var isLoadingDiskUsage = false
   var cleanupResultMessage: String?
+  var selectedResourceKind: ResourceKind = .containers
+  var images: [DockerImage] = []
+  var volumes: [DockerVolume] = []
+  var networks: [DockerNetwork] = []
+  var buildCache: [DockerBuildCacheRecord] = []
+  var isLoadingResources = false
+  var resourceResultMessage: String?
 
   var autoStartColima: Bool {
     get { defaults.object(forKey: Keys.autoStartColima) as? Bool ?? true }
@@ -143,6 +151,10 @@ final class AppModel {
         containers = []
       }
       errorMessage = nil
+
+      if page == .resources {
+        await refreshResources()
+      }
     } catch {
       if !silent || profiles.isEmpty {
         errorMessage = error.localizedDescription
@@ -205,6 +217,135 @@ final class AppModel {
     page = .cleanup
     cleanupResultMessage = nil
     Task { await refreshDiskUsage() }
+  }
+
+  func showResources() {
+    page = .resources
+    resourceResultMessage = nil
+    Task {
+      await refreshResources()
+      await refreshDiskUsage()
+    }
+  }
+
+  func selectResourceKind(_ kind: ResourceKind) {
+    selectedResourceKind = kind
+    resourceResultMessage = nil
+  }
+
+  func resourceCount(for kind: ResourceKind) -> Int {
+    switch kind {
+    case .containers: containers.count
+    case .images: images.count
+    case .volumes: volumes.count
+    case .networks: networks.count
+    case .buildCache: buildCache.count
+    }
+  }
+
+  /// How many items `removeAllResources(of:)` would delete.
+  func removableCount(for kind: ResourceKind) -> Int {
+    kind.removesByReference ? removableReferences(for: kind).count : resourceCount(for: kind)
+  }
+
+  /// References that `docker rm` accepts for every removable item of this kind.
+  func removableReferences(for kind: ResourceKind) -> [String] {
+    switch kind {
+    case .containers:
+      return containers.map(\.id)
+    case .images:
+      var seen: Set<String> = []
+      return images.map(\.removalReference).filter { seen.insert($0).inserted }
+    case .volumes:
+      return volumes.map(\.name)
+    case .networks:
+      return networks.filter { !$0.isPredefined }.map(\.name)
+    case .buildCache:
+      return []
+    }
+  }
+
+  /// Containers that currently mount this volume.
+  func containerCount(usingVolume name: String) -> Int {
+    containers.count { container in
+      container.mounts.contains { $0.volumeName == name }
+    }
+  }
+
+  func refreshResources() async {
+    guard selectedProfile?.isRunning == true, selectedProfile?.runtime == "docker" else {
+      images = []
+      volumes = []
+      networks = []
+      buildCache = []
+      return
+    }
+    guard !isLoadingResources else { return }
+    isLoadingResources = true
+    defer { isLoadingResources = false }
+
+    do {
+      async let loadedImages = service.images(profileName: selectedProfileName)
+      async let loadedVolumes = service.volumes(profileName: selectedProfileName)
+      async let loadedNetworks = service.networks(profileName: selectedProfileName)
+      async let loadedBuildCache = service.buildCache(profileName: selectedProfileName)
+      images = try await loadedImages
+      volumes = try await loadedVolumes
+      networks = try await loadedNetworks
+      buildCache = try await loadedBuildCache
+      errorMessage = nil
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func pruneUnused(_ kind: ResourceKind) async {
+    guard activeOperation == nil else { return }
+    activeOperation = "Pruning unused \(kind.title.lowercased())"
+    errorMessage = nil
+    resourceResultMessage = nil
+
+    do {
+      let results = try await service.prune(
+        [kind.cleanupCategory],
+        profileName: selectedProfileName
+      )
+      let reclaimed = results.first?.reclaimedSpace
+      resourceResultMessage = ["Unused \(kind.title.lowercased()) removed.", reclaimed]
+        .compactMap { $0 }
+        .joined(separator: " ")
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+
+    activeOperation = nil
+    await finishResourceOperation()
+  }
+
+  func removeAllResources(of kind: ResourceKind) async {
+    let count = removableCount(for: kind)
+    let references = removableReferences(for: kind)
+    guard count > 0, activeOperation == nil else { return }
+    activeOperation = "Removing all \(kind.title.lowercased())"
+    errorMessage = nil
+    resourceResultMessage = nil
+
+    do {
+      try await service.removeAll(kind, references: references, profileName: selectedProfileName)
+      resourceResultMessage =
+        "Removed \(count) \(kind.itemNoun(count))."
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+
+    activeOperation = nil
+    await finishResourceOperation()
+  }
+
+  /// `refresh()` reloads the resource lists while the resources page is visible.
+  private func finishResourceOperation() async {
+    await refresh()
+    await refreshDiskUsage()
   }
 
   func setCleanupCategory(_ category: CleanupCategory, selected: Bool) {

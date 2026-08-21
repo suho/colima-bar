@@ -49,11 +49,13 @@ struct DockerInspect: Decodable, Sendable {
     let type: String
     let source: String
     let destination: String
+    let name: String?
 
     enum CodingKeys: String, CodingKey {
       case type = "Type"
       case source = "Source"
       case destination = "Destination"
+      case name = "Name"
     }
   }
 
@@ -84,7 +86,12 @@ struct DockerInspect: Decodable, Sendable {
       health: state.health?.status,
       ports: publishedPorts,
       mounts: mounts.map {
-        ContainerMount(source: $0.source, destination: $0.destination, type: $0.type)
+        ContainerMount(
+          source: $0.source,
+          destination: $0.destination,
+          type: $0.type,
+          volumeName: $0.name
+        )
       },
       labels: config.labels ?? [:]
     )

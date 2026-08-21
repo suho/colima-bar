@@ -41,6 +41,7 @@ struct DockerInspectTests {
     #expect(container.ports.count == 1)
     #expect(container.ports.first?.address == "localhost:4000")
     #expect(container.mounts.first?.destination == "/app")
+    #expect(container.mounts.first?.volumeName == nil)
   }
 
   @Test

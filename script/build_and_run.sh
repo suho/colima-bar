@@ -3,6 +3,10 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="ColimaBar"
+CONFIGURATION="debug"
+case "$MODE" in
+  release|--release) CONFIGURATION="release" ;;
+esac
 BUNDLE_ID="dev.suho.colimabar"
 MIN_SYSTEM_VERSION="14.0"
 
@@ -20,8 +24,8 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 cd "$ROOT_DIR"
-swift build
-BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+swift build -c "$CONFIGURATION"
+BUILD_BINARY="$(swift build -c "$CONFIGURATION" --show-bin-path)/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
@@ -58,6 +62,9 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
+# Ad-hoc signing keeps SMAppService (Launch at Login) working for a locally built bundle.
+/usr/bin/codesign --force --sign - "$APP_BUNDLE" >/dev/null 2>&1
+
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
 }
@@ -82,8 +89,12 @@ case "$MODE" in
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
     ;;
+  release|--release)
+    echo "Built $APP_BUNDLE"
+    echo "Install with: cp -R \"$APP_BUNDLE\" /Applications/"
+    ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--release]" >&2
     exit 2
     ;;
 esac

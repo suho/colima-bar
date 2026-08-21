@@ -38,6 +38,14 @@ struct HeaderView: View {
           if model.selectedProfile?.isRunning == true && model.selectedProfile?.runtime == "docker"
           {
             Button {
+              model.showResources()
+            } label: {
+              Image(systemName: "square.stack.3d.up")
+            }
+            .buttonStyle(.plain)
+            .help("Docker Resources")
+
+            Button {
               model.showCleanup()
             } label: {
               Image(systemName: "trash.slash")

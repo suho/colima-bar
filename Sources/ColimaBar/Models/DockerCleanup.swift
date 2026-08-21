@@ -5,6 +5,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
   case images
   case volumes
   case networks
+  case buildCache
 
   var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .images: "Unused Images"
     case .volumes: "Unused Volumes"
     case .networks: "Unused Networks"
+    case .buildCache: "Build Cache"
     }
   }
 
@@ -23,6 +25,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .images: "Remove images not used by a container."
     case .volumes: "Remove named and anonymous unused volumes."
     case .networks: "Remove custom networks not used by a container."
+    case .buildCache: "Remove build cache that recent builds do not use."
     }
   }
 
@@ -32,6 +35,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .images: "square.stack.3d.up"
     case .volumes: "externaldrive"
     case .networks: "network"
+    case .buildCache: "hammer"
     }
   }
 
@@ -41,6 +45,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .images: ["image", "prune", "--all", "--force"]
     case .volumes: ["volume", "prune", "--all", "--force"]
     case .networks: ["network", "prune", "--force"]
+    case .buildCache: ["builder", "prune", "--force"]
     }
   }
 
@@ -50,6 +55,7 @@ enum CleanupCategory: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .images: "Images"
     case .volumes: "Local Volumes"
     case .networks: nil
+    case .buildCache: "Build Cache"
     }
   }
 }
@@ -80,4 +86,12 @@ struct DockerResourceUsage: Decodable, Identifiable, Hashable, Sendable {
 struct CleanupResult: Sendable {
   let category: CleanupCategory
   let output: String
+
+  /// Docker prune prints a trailing "Total reclaimed space: 1.2GB" line.
+  var reclaimedSpace: String? {
+    output
+      .split(whereSeparator: \.isNewline)
+      .last { $0.localizedCaseInsensitiveContains("Total reclaimed space") }
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+  }
 }

@@ -16,7 +16,7 @@ struct MenuBarContentView: View {
 
       content
     }
-    .frame(width: 390, height: model.page == .cleanup ? 520 : 440)
+    .frame(width: 390, height: model.page == .dashboard || model.page == .settings ? 440 : 520)
     .background(.regularMaterial)
     .task {
       while !Task.isCancelled {
@@ -32,6 +32,8 @@ struct MenuBarContentView: View {
       SettingsView(model: model)
     } else if model.page == .cleanup {
       DockerCleanupView(model: model)
+    } else if model.page == .resources {
+      ResourcesView(model: model)
     } else if model.profiles.isEmpty {
       EmptyStateView(model: model)
     } else if model.selectedProfile?.isRunning != true {
