@@ -19,10 +19,10 @@ final class AppModel {
   var profiles: [ColimaProfile] = []
   var selectedProfileName = "default"
   var containers: [DockerContainer] = []
-  var isRefreshing = false
+  private var isRefreshInFlight = false
+  var isShowingRefreshIndicator = false
   var activeOperation: String?
   var errorMessage: String?
-  var lastRefreshed: Date?
   var launchAtLoginEnabled = false
   var launchAtLoginError: String?
   var page: Page = .dashboard
@@ -65,7 +65,9 @@ final class AppModel {
   }
 
   var statusSymbol: String {
-    if activeOperation != nil || isRefreshing { return "shippingbox.and.arrow.backward.fill" }
+    if activeOperation != nil || isShowingRefreshIndicator {
+      return "shippingbox.and.arrow.backward.fill"
+    }
     if selectedProfile?.isRunning == true { return "shippingbox.fill" }
     return "shippingbox"
   }
@@ -104,9 +106,28 @@ final class AppModel {
   }
 
   func refresh(silent: Bool = false) async {
-    guard !isRefreshing, activeOperation == nil else { return }
-    isRefreshing = true
-    defer { isRefreshing = false }
+    await executeRefresh(silent: silent, showsIndicator: false)
+  }
+
+  func refreshFromUser() async {
+    guard activeOperation == nil else { return }
+
+    while isRefreshInFlight {
+      try? await Task.sleep(for: .milliseconds(25))
+      guard activeOperation == nil else { return }
+    }
+
+    await executeRefresh(silent: false, showsIndicator: true)
+  }
+
+  private func executeRefresh(silent: Bool, showsIndicator: Bool) async {
+    guard !isRefreshInFlight, activeOperation == nil else { return }
+    isRefreshInFlight = true
+    isShowingRefreshIndicator = showsIndicator
+    defer {
+      isRefreshInFlight = false
+      isShowingRefreshIndicator = false
+    }
 
     do {
       let loadedProfiles = try await service.profiles()
@@ -122,11 +143,14 @@ final class AppModel {
         containers = []
       }
       errorMessage = nil
-      lastRefreshed = Date()
     } catch {
       if !silent || profiles.isEmpty {
         errorMessage = error.localizedDescription
       }
+    }
+
+    if showsIndicator {
+      try? await Task.sleep(for: .milliseconds(400))
     }
   }
 

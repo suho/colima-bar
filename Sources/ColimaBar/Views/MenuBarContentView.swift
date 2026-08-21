@@ -15,8 +15,6 @@ struct MenuBarContentView: View {
       }
 
       content
-      Divider()
-      FooterView(model: model)
     }
     .frame(width: 390, height: model.page == .cleanup ? 520 : 440)
     .background(.regularMaterial)

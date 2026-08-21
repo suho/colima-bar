@@ -48,6 +48,14 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+
+        HStack {
+          Spacer()
+          Button("Quit Colima Bar", systemImage: "power") {
+            model.quit()
+          }
+          .buttonStyle(.bordered)
+        }
       }
       .padding(16)
     }

@@ -20,19 +20,19 @@ struct HeaderView: View {
 
         Spacer()
 
-        if model.isRefreshing || model.activeOperation != nil {
+        if model.isShowingRefreshIndicator || model.activeOperation != nil {
           ProgressView()
             .controlSize(.small)
         }
 
         Button {
-          Task { await model.refresh() }
+          Task { await model.refreshFromUser() }
         } label: {
           Image(systemName: "arrow.clockwise")
         }
         .buttonStyle(.plain)
         .help("Refresh")
-        .disabled(model.isRefreshing || model.activeOperation != nil)
+        .disabled(model.isShowingRefreshIndicator || model.activeOperation != nil)
 
         if model.page == .dashboard {
           if model.selectedProfile?.isRunning == true && model.selectedProfile?.runtime == "docker"
